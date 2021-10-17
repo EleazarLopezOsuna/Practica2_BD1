@@ -1425,7 +1425,7 @@ DROP TABLE Mortality;
 ```
 -- set serveroutput on size unlimited;
 -- Consulta 1
-	SELECT Pais.nombre AS Pais, SUM(Casos.new_cases) AS "Actuales por Sumatoria", MAX(Casos.total_cases) AS "Actuales por Total" 
+	SELECT Pais.nombre AS Pais, COALESCE(SUM(Casos.new_cases), 0) AS "Actuales por Sumatoria", COALESCE(MAX(Casos.total_cases), 0) AS "Actuales por Total" 
 		FROM Pais, Casos, Continente
 		WHERE Casos.id_pais = Pais.id_pais AND Pais.id_continente = Continente.id_continente AND Continente.nombre IS NOT NULL
 		GROUP BY Pais.nombre;
@@ -1512,7 +1512,7 @@ DROP TABLE Mortality;
 		ORDER BY "Crecimiento en %" DESC;
 
 -- Consulta 5
-	SELECT Pais.nombre AS Pais, ROUND(AVG(Casos.new_cases), 2) AS Contagios
+	SELECT Pais.nombre AS Pais, COALESCE(ROUND(AVG(Casos.new_cases), 2), 0) AS Contagios
 		FROM Pais, Casos, Fecha, Continente
 		WHERE Casos.id_pais = Pais.id_pais AND Casos.id_fecha = Fecha.id_fecha
 		    AND EXTRACT(year FROM Fecha.fecha) = 2020
@@ -1530,16 +1530,22 @@ DROP TABLE Mortality;
 	IS
 	BEGIN
         IF p_inferior < p_superior THEN
-            OPEN p_salida FOR SELECT Pais.nombre, Fecha.fecha
-                FROM Casos, Pais, Fecha
+            OPEN p_salida FOR SELECT Pais.nombre, Fecha.fecha, SUM(Casos.new_cases)
+                FROM Casos, Pais, Fecha, Continente
                 WHERE Casos.id_pais = Pais.id_pais AND Casos.id_fecha = Fecha.id_fecha
                 AND Casos.new_cases BETWEEN p_inferior AND p_superior
+                AND Pais.id_continente = Continente.id_continente
+            	AND Continente.nombre IS NOT NULL
+                GROUP BY Pais.nombre, Fecha.fecha
                 FETCH NEXT 600 ROWS ONLY;
         ELSIF p_superior < p_inferior THEN
-            OPEN p_salida FOR SELECT Pais.nombre, Fecha.fecha
-                FROM Casos, Pais, Fecha
+            OPEN p_salida FOR SELECT Pais.nombre, Fecha.fecha, SUM(Casos.new_cases)
+                FROM Casos, Pais, Fecha, Continente
                 WHERE Casos.id_pais = Pais.id_pais AND Casos.id_fecha = Fecha.id_fecha
                 AND Casos.new_cases BETWEEN p_superior AND p_inferior
+                AND Pais.id_continente = Continente.id_continente
+            	AND Continente.nombre IS NOT NULL
+                GROUP BY Pais.nombre, Fecha.fecha
                 FETCH NEXT 600 ROWS ONLY;
         END IF;
 	END;
@@ -1547,16 +1553,17 @@ DROP TABLE Mortality;
     DECLARE
 	    v_nombre VARCHAR(256);
         v_fecha DATE;
+        v_suma NUMBER;
 	    v_salida    SYS_REFCURSOR;
 	BEGIN
 	    DBMS_OUTPUT.ENABLE;
-	    DBMS_OUTPUT.PUT_LINE('Nombre    Fecha');
-	    DBMS_OUTPUT.PUT_LINE('-------    -------');
-	    consulta6(0, 37, v_salida);
+	    DBMS_OUTPUT.PUT_LINE('Nombre    Fecha    Cantidad');
+	    DBMS_OUTPUT.PUT_LINE('-------    Fecha    Cantidad');
+	    consulta6(80000, 90000, v_salida);
 	    LOOP
-	        FETCH v_salida INTO v_nombre, v_fecha;
+	        FETCH v_salida INTO v_nombre, v_fecha, v_suma;
 	        EXIT WHEN v_salida%NOTFOUND;
-	        DBMS_OUTPUT.PUT_LINE(v_nombre || '             ' || v_fecha);
+	        DBMS_OUTPUT.PUT_LINE(v_nombre || '             ' || v_fecha || '             ' || v_suma);
 	    END LOOP;
 	    CLOSE v_salida;
 	END;
